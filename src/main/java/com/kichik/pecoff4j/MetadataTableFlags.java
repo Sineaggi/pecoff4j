@@ -1,0 +1,49 @@
+package com.kichik.pecoff4j;
+
+public class MetadataTableFlags {
+    public static long Module = 1L; // 0x00
+    public static long TypeRef = 2L; // 0x01
+    public static long TypeDef = 4L; // 0x02
+    public static long Reserved1 = 8L;
+    public static long Field = 16L; // 0x04
+    public static long Reserved2 = 32L;
+    public static long MethodDef = 64L;
+    public static long Reserved3 = 128L;
+    public static long Param = 256L;
+    public static long InterfaceImpl = 512L;
+    public static long MemberRef = 1024L;
+    public static long Constant = 2048L;
+    public static long CustomAttribute = 4096L;
+    public static long FieldMarshal = 8192L;
+    public static long DeclSecurity = 16384L;
+    public static long ClassLayout = 32768L;
+    public static long FieldLayout = 65536L;
+    public static long StandAloneSig = 131072L;
+    public static long EventMap = 262144L;
+    public static long Reserved4 = 524288L;
+    public static long Event = 1048576L;
+    public static long PropertyMap = 2097152L;
+    public static long Reserved5 = 4194304L;
+    public static long Property = 8388608L;
+    public static long MethodSemantics = 16777216L;
+    public static long MethodImpl = 33554432L;
+    public static long ModuleRef = 67108864L;
+    public static long TypeSpec = 134217728L;
+    public static long ImplMap = 268435456L;
+    public static long FieldRVA = 536870912L;
+    public static long Reserved6 = 1073741824L;
+    public static long Reserved7 = 2147483648L;
+    public static long Assembly = 4294967296L;
+    public static long AssemblyProcessor = 8589934592L;
+    public static long AssemblyOS = 17179869184L;
+    public static long AssemblyRef = 34359738368L;
+    public static long AssemblyRefProcessor = 68719476736L;
+    public static long AssemblyRefOS = 137438953472L;
+    public static long File = 274877906944L;
+    public static long ExportedType = 549755813888L;
+    public static long ManifestResource = 1099511627776L;
+    public static long NestedClass = 2199023255552L;
+    public static long GenericParam = 4398046511104L;
+    public static long MethodSpec = 8796093022208L;
+    public static long GenericParamConstraint = 17592186044416L;
+}
