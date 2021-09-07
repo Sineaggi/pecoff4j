@@ -1,11 +1,12 @@
 package com.kichik.pecoff4j;
 
 import com.kichik.pecoff4j.io.DataReader;
+import com.kichik.pecoff4j.io.IDataReader;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 public class CLRParser {
     public static Metadata parseCLRMetadata(PE pe) throws IOException {
@@ -40,15 +41,75 @@ public class CLRParser {
             streamHeaders.add(streamHeader);
         }
 
-        StreamHeader stringsStreamHeader = Objects.requireNonNull(
-                findStringsStream(streamHeaders), "#Strings header must exist");
+        //Map<String, byte[]> moba = new HashMap<>();
+        Metadata md = null;
+        StringsStream stringsStream = null;
+        for (StreamHeader st : streamHeaders) {
+            //dr.jumpTo(st.getOffset());
+            //st.getOffset();
+            switch (st.getName()) {
+                case "#~":
+                case "#-": {
+                    byte[] header = parseHeader(st, dr);
+                    DataReader dr2 = new DataReader(header);
+                    MetadataStream mds = mds(dr2);
+                    md = md(dr2, mds);
+                    break;
+                }
+                case "#Strings": {
+                    byte[] strings = parseStrings(st, dr);
+                    stringsStream = new StringsStream(strings);
+                    break;
+                }
+                case "#US": {
+                    byte[] us = parseUS(st, dr);
+                    // moba.put(st.getName(), us);
+                    break;
+                }
+                case "#Blob": {
+                    byte[] blob = parseUnknown(st, dr);
+                    // moba.put(st.getName(), us);
+                    break;
+                }
+                case "#GUID": {
+                    byte[] guid = parseGuid(st, dr);
+                    //moba.put(st.getName(), guid);
+
+                    //int pm3 = indexOf(guid, "PeekMessageA".getBytes(StandardCharsets.UTF_8));
+                    //if (pm3 != -1) {
+                    //    System.out.println(pm3);
+                    //}
+                    break;
+                }
+                default: {
+                    throw new RuntimeException("Unknown metadata stream " + st.getName());
+                }
+            }
+            // finish reading any missed input, also will throw if we've previously read too far.
+            dr.jumpTo(st.getOffset() + st.getSize());
+        }
+        if (size != dr.getPosition()) {
+            throw new RuntimeException("Failed to read all bytes, size of clr " + size + " != bytes read " + dr.getPosition());
+        }
+
+        md.stringsStream = stringsStream;
+
+        //StreamHeader stringsStreamHeader = Objects.requireNonNull(
+        //        findStringsStream(streamHeaders), "#Strings header must exist");
         //System.out.println(stringsStreamHeader.getOffset());
 
-        dr = new DataReader(sb.getData(), offset - sh.getPointerToRawData(), size);
-        dr.jumpTo(stringsStreamHeader.getOffset());
-        byte[] strings = new byte[stringsStreamHeader.getSize()];
-        dr.read(strings);
-        StringsStream stringsStream = new StringsStream(strings);
+        //dr = new DataReader(sb.getData(), offset - sh.getPointerToRawData(), size);
+        //dr.jumpTo(stringsStreamHeader.getOffset());
+        //byte[] strings = new byte[stringsStreamHeader.getSize()];
+
+        //int pm = indexOf(strings, "PeekMessageA".getBytes(StandardCharsets.UTF_8));
+        //System.out.println(pm);
+
+        //int pm2 = indexOf(allb, "PeekMessageA".getBytes(StandardCharsets.UTF_8));
+        //System.out.println(pm2);
+
+        //dr.read(strings);
+        //StringsStream stringsStream = new StringsStream(strings);
         //dr = new DataReader(sb.getData(), offset - sh.getPointerToRawData(), size);
         // todo: read until stringsStreamHeader.getSize();
         //Map<Integer, String> offsetToStrings = new HashMap<>();
@@ -83,16 +144,27 @@ public class CLRParser {
         //System.out.println(last1);
 
         // todo: maybe don't read like this
-        dr = new DataReader(sb.getData(), offset - sh.getPointerToRawData(), size);
+        //dr = new DataReader(sb.getData(), offset - sh.getPointerToRawData(), size);
 
-        StreamHeader metadataStreamHeader = Objects.requireNonNull(findMetadataStream(streamHeaders), "#~ or #- header must exist");
+        //StreamHeader metadataStreamHeader = Objects.requireNonNull(findMetadataStream(streamHeaders), "#~ or #- header must exist");
         //System.out.println(metadataStreamHeader.getOffset());
-        dr.jumpTo(metadataStreamHeader.getOffset()); // should be noop?
+        //dr.jumpTo(metadataStreamHeader.getOffset()); // should be noop?
         //dr = new DataReader(pe.getSectionTable().getSection(0).getData());
         //dr.jumpTo(pe.getSectionTable().getRVAConverter().convertVirtualAddressToRawDataPointer(metadataStreammm.getOffset()) - dataoffset);
-        byte[] mdby = new byte[metadataStreamHeader.getSize()];
-        dr.read(mdby);
-        dr = new DataReader(mdby);
+        //byte[] mdby = new byte[metadataStreamHeader.getSize()];
+        //dr.read(mdby);
+        //dr = new DataReader(mdby);
+
+
+        //MetadataStream mds = mds(dr);
+        //Metadata md = md(dr, mds);
+        Objects.requireNonNull(md);
+
+        return md;
+    }
+
+    static MetadataStream mds(DataReader dr) throws IOException {
+
         MetadataStream metadataStream = new MetadataStream();
         metadataStream.setReserved1(dr.readDoubleWord());
         metadataStream.setMajorVersion(dr.readByte());
@@ -103,12 +175,123 @@ public class CLRParser {
         metadataStream.setSortedTablesFlags(dr.readLong());
         // todo: continue here https://codingwithspike.wordpress.com/2012/09/01/building-a-net-disassembler-part-4-reading-the-metadata-tables-in-the-stream/
 
-        int n = Long.bitCount(metadataStream.getTablesFlags());
+        return metadataStream;
+    }
+
+    static MD getMDfromIndex(int index) {
+        switch (index)
+        {
+            case 0x00: return MD.module;
+            case 0x01: return MD.typeRef;
+            case 0x02: return MD.typeDef;
+            case 0x04: return MD.field;
+            case 0x06: return MD.methodDef;
+            case 0x08: return MD.param;
+            case 0x09: return MD.interfaceImpl;
+            case 0x0a: return MD.memberRef;
+            case 0x0b: return MD.constant;
+            case 0x0c: return MD.customAttribute;
+            case 0x0d: return MD.fieldMarshal;
+            case 0x0e: return MD.declSecurity;
+            case 0x0f: return MD.classLayout;
+            case 0x10: return MD.fieldLayout;
+            case 0x11: return MD.standAloneSig;
+            case 0x12: return MD.eventMap;
+            case 0x14: return MD.event;
+            case 0x15: return MD.propertyMap;
+            case 0x17: return MD.property;
+            case 0x18: return MD.methodSemantics;
+            case 0x19: return MD.methodImpl;
+            case 0x1a: return MD.moduleRef;
+            case 0x1b: return MD.typeSpec;
+            case 0x1c: return MD.implMap;
+            case 0x1d: return MD.fieldRVA;
+            case 0x20: return MD.assembly;
+            case 0x21: return MD.assemblyProcessor;
+            case 0x22: return MD.assemblyOS;
+            case 0x23: return MD.assemblyRef;
+            case 0x24: return MD.assemblyRefProcessor;
+            case 0x25: return MD.assemblyRefOS;
+            case 0x26: return MD.file;
+            case 0x27: return MD.exportedType;
+            case 0x28: return MD.manifestResource;
+            case 0x29: return MD.nestedClass;
+            case 0x2a: return MD.genericParam;
+            case 0x2b: return MD.methodSpec;
+            case 0x2c: return MD.genericParamConstraint;
+            default: return MD.unknown;
+        }
+    }
+
+    static Metadata md(DataReader dr, MetadataStream metadataStream) throws IOException {
+
+        long tablesFlags = metadataStream.getTablesFlags();
+        int n = Long.bitCount(tablesFlags);
         int[] tableSizes = new int[n];
         for (int i = 0; i < n; i++) {
             tableSizes[i] = dr.readDoubleWord();
         }
         metadataStream.setTableSizes(tableSizes);
+
+        Map<MD, Integer> rowCounts = new HashMap<>();
+
+        int tableIndex = 0;
+        for (int i = 0; i < 64; i++) {
+            if ((tablesFlags & (1L << i)) != 0)
+            {
+                rowCounts.put(getMDfromIndex(i), tableSizes[tableIndex++]);
+            }
+        }
+
+        int bits = metadataStream.getOffsetSizeFlags();
+        int stringIndexSize = (bits & 0x01) == 0x01 ? 4 : 2;
+        int guidIndexSize = (bits & 0x02) == 0x02 ? 4 : 2;
+        int blobIndexSize = (bits & 0x04) == 0x04 ? 4 : 2;
+
+        int typeDefOrRefIndexSize
+                = compositeIndexSize(rowCounts.get(MD.typeDef), rowCounts.get(MD.typeRef), rowCounts.get(MD.typeSpec));
+        int hasConstantIndexSize
+                = compositeIndexSize(rowCounts.get(MD.field), rowCounts.get(MD.param), rowCounts.get(MD.property));
+        int hasCustomAttributeIndexSize
+                = compositeIndexSize(rowCounts.get(MD.methodDef), rowCounts.get(MD.field), rowCounts.get(MD.typeRef),
+                rowCounts.get(MD.typeDef), rowCounts.get(MD.param), rowCounts.get(MD.interfaceImpl),
+                rowCounts.get(MD.memberRef), rowCounts.get(MD.module), rowCounts.get(MD.property),
+                rowCounts.get(MD.event), rowCounts.get(MD.standAloneSig), rowCounts.get(MD.moduleRef),
+                rowCounts.get(MD.typeSpec), rowCounts.get(MD.assembly), rowCounts.get(MD.assemblyRef),
+                rowCounts.get(MD.file), rowCounts.get(MD.exportedType), rowCounts.get(MD.manifestResource),
+                rowCounts.get(MD.genericParam), rowCounts.get(MD.genericParamConstraint),
+                rowCounts.get(MD.methodSpec));
+        int hasFieldMarshalIndexSize
+                = compositeIndexSize(rowCounts.get(MD.field), rowCounts.get(MD.param));
+        int hasDeclSecurityIndexSize
+                = compositeIndexSize(rowCounts.get(MD.typeDef), rowCounts.get(MD.methodDef), rowCounts.get(MD.assembly));
+        int memberRefParentIndexSize
+                = compositeIndexSize(rowCounts.get(MD.typeDef), rowCounts.get(MD.typeRef), rowCounts.get(MD.moduleRef),
+                rowCounts.get(MD.methodDef), rowCounts.get(MD.typeSpec));
+        int hasSemanticsIndexSize
+                = compositeIndexSize(rowCounts.get(MD.event), rowCounts.get(MD.property));
+        int methodDefOrRefIndexSize
+                = compositeIndexSize(rowCounts.get(MD.methodDef), rowCounts.get(MD.memberRef));
+        int memberForwardedIndexSize
+                = compositeIndexSize(rowCounts.get(MD.field), rowCounts.get(MD.methodDef));
+        int implementationIndexSize
+                = compositeIndexSize(rowCounts.get(MD.file), rowCounts.get(MD.assemblyRef), rowCounts.get(MD.exportedType));
+        int customAttributeTypeIndexSize
+                = compositeIndexSize(rowCounts.get(MD.methodDef), rowCounts.get(MD.memberRef), 0, 0, 0);
+        int resolutionScopeIndexSize
+                = compositeIndexSize(rowCounts.get(MD.module), rowCounts.get(MD.moduleRef),
+                rowCounts.get(MD.assemblyRef),  rowCounts.get(MD.typeRef));
+        int typeOrMethodDefIndexSize
+                = compositeIndexSize(rowCounts.get(MD.typeDef), rowCounts.get(MD.methodDef));
+
+        DataReaderWrapper drw = new DataReaderWrapper(dr);
+
+        //for (ModuleTableRow moduleTableRow : md.getModuleTableRows()) {
+        //    System.out.println("tater");
+        //    System.out.println(stringsStream.get(moduleTableRow.getName()));
+        //}
+
+
         int tableSizesIndex = 0;
         //IntMap intMap = new IntMap();
         Metadata md = new Metadata();
@@ -118,29 +301,23 @@ public class CLRParser {
             for (int i = 0; i < numModules; i++) {
                 ModuleTableRow mtr = new ModuleTableRow();
                 mtr.setGeneration(dr.readWord());
-                mtr.setName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                mtr.setMvid(readGuidStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                mtr.setEncId(readGuidStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                mtr.setEncBaseId(readGuidStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                mtr.setName(drw.read(stringIndexSize));
+                mtr.setMvid(drw.read(guidIndexSize));
+                mtr.setEncId(drw.read(guidIndexSize));
+                mtr.setEncBaseId(drw.read(guidIndexSize));
                 moduleTableRows.add(mtr);
             }
             md.setModuleTableRows(moduleTableRows);
             //logger.info("Module ({})", numModules);
         }
-
-        //for (ModuleTableRow moduleTableRow : md.getModuleTableRows()) {
-        //    System.out.println("tater");
-        //    System.out.println(stringsStream.get(moduleTableRow.getName()));
-        //}
-
         if (metadataStream.hasTable(MetadataTableFlags.TypeRef)) {
             int numModules = tableSizes[tableSizesIndex++];
             List<TypeRefTableRow> typeRefTableRows = new ArrayList<>();
             for (int i = 0; i < numModules; i++) {
-                TypeRefTableRow trtr = new TypeRefTableRow();
-                trtr.setResolutionScope(dr.readWord()); // todo: 2 or 4 bytes depending on some rule i can't follow, ????
-                trtr.setTypeName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                trtr.setTypeNamespace(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                TypeRefTableRow trtr = new TypeRefTableRow(md);
+                trtr.setResolutionScope(drw.read(resolutionScopeIndexSize));
+                trtr.setTypeName(drw.read(stringIndexSize));
+                trtr.setTypeNamespace(drw.read(stringIndexSize));
                 typeRefTableRows.add(trtr);
                 //String log = ("TypeRef " + trtr.getResolutionScope() + ", " + stringsStream.get(trtr.getTypeName()) + ", " + stringsStream.get(trtr.getTypeNamespace()));
             }
@@ -151,13 +328,13 @@ public class CLRParser {
             int numModules = tableSizes[tableSizesIndex++];
             List<TypeDefTableRow> typeDefTableRows = new ArrayList<>();
             for (int i = 0; i < numModules; i++) {
-                TypeDefTableRow tdtr = new TypeDefTableRow();
+                TypeDefTableRow tdtr = new TypeDefTableRow(md);
                 tdtr.setFlags(dr.readDoubleWord());
-                tdtr.setTypeName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                tdtr.setTypeNamespace(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                tdtr.setExtendsType(dr.readWord()); // todo: same as above, 2 vs 4 bytes? unsure, check if coded
-                tdtr.setFieldList(dr.readDoubleWord()); // todo: think this is correct, check if is simple
-                tdtr.setMethodList(dr.readDoubleWord()); // todo: think this is correct, check if is simple
+                tdtr.setTypeName(drw.read(stringIndexSize));
+                tdtr.setTypeNamespace(drw.read(stringIndexSize));
+                tdtr.setExtendsType(drw.read(typeDefOrRefIndexSize));
+                tdtr.setFieldList(drw.read(indexSize(rowCounts.get(MD.field))));
+                tdtr.setMethodList(drw.read(indexSize(rowCounts.get(MD.methodDef))));
                 //String log = ("TypeDef " + String.format("%08X", tdtr.getFlags()) + " | " + stringsStream.get(tdtr.getTypeName()) + " | " + stringsStream.get(tdtr.getTypeNamespace()) + " | " + tdtr.getExtendsType());
                 // TypeDefOrRef
                 typeDefTableRows.add(tdtr);
@@ -183,8 +360,8 @@ public class CLRParser {
             for (int i = 0; i < numModules; i++) {
                 FieldTableRow ftr = new FieldTableRow();
                 ftr.setFlags(dr.readWord());
-                ftr.setName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                ftr.setSignature(readBlobStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                ftr.setName(drw.read(stringIndexSize));
+                ftr.setSignature(drw.read(blobIndexSize));
                 //String log = ("Field " + String.format("%04X", ftr.getFlags()) + " | " + stringsStream.get(ftr.getName()));
                 //System.out.println(log);
                 // TypeDefOrRef
@@ -204,8 +381,8 @@ public class CLRParser {
                 mdtr.setRva(dr.readDoubleWord());
                 mdtr.setImplFlags(dr.readWord());
                 mdtr.setFlags(dr.readWord());
-                mdtr.setName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                mdtr.setSignature(readBlobStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                mdtr.setName(drw.read(stringIndexSize));
+                mdtr.setSignature(drw.read(blobIndexSize));
                 mdtr.setParamList(dr.readDoubleWord());
                 //String log = ("Field " + String.format("%04X", ftr.getFlags()) + " | " + stringsStream.get(ftr.getName()));
                 //System.out.println(log);
@@ -231,7 +408,7 @@ public class CLRParser {
                 ParamTableRow ptr = new ParamTableRow();
                 ptr.setFlags(dr.readWord());
                 ptr.setSequence(dr.readWord());
-                ptr.setName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                ptr.setName(drw.read(stringIndexSize));
                 paramTableRows.add(ptr);
             }
             md.setParamTableRows(paramTableRows);
@@ -248,8 +425,8 @@ public class CLRParser {
             List<InterfaceImplTableRow> interfaceImplTableRows = new ArrayList<>();
             for (int i = 0; i < numModules; i++) {
                 InterfaceImplTableRow iitr = new InterfaceImplTableRow();
-                iitr.setClassType(readSimpleIndex(md.getTypeDefTableRows(), dr));
-                iitr.setInterfaceType(dr.readDoubleWord()); // todo: codedindex
+                iitr.setClassType(drw.read(indexSize(rowCounts.get(MD.typeDef))));
+                iitr.setInterfaceType(drw.read(typeDefOrRefIndexSize));
                 interfaceImplTableRows.add(iitr);
             }
             md.setInterfaceImplTableRows(interfaceImplTableRows);
@@ -266,9 +443,9 @@ public class CLRParser {
             List<MemberRefTableRow> memberRefTableRows = new ArrayList<>();
             for (int i = 0; i < numModules; i++) {
                 MemberRefTableRow mrtr = new MemberRefTableRow();
-                mrtr.setClassType(dr.readDoubleWord()); // todo: codedindex
-                mrtr.setName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                mrtr.setSignature(readBlobStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                mrtr.setClassType(drw.read(memberRefParentIndexSize));
+                mrtr.setName(drw.read(stringIndexSize));
+                mrtr.setSignature(drw.read(blobIndexSize));
                 memberRefTableRows.add(mrtr);
             }
             md.setMemberRefTableRows(memberRefTableRows);
@@ -287,8 +464,8 @@ public class CLRParser {
                 ConstantTableRow ctr = new ConstantTableRow();
                 ctr.setType(dr.readByte());
                 ctr.setPadding(dr.readByte());
-                ctr.setParent(dr.readDoubleWord()); // todo: codedindex
-                ctr.setValue(readBlobStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                ctr.setParent(drw.read(hasConstantIndexSize));
+                ctr.setValue(drw.read(blobIndexSize));
                 constantTableRows.add(ctr);
             }
             md.setConstantTableRows(constantTableRows);
@@ -305,9 +482,9 @@ public class CLRParser {
             List<CustomAttributeTableRow> customAttributeTableRows = new ArrayList<>();
             for (int i = 0; i < numModules; i++) {
                 CustomAttributeTableRow catr = new CustomAttributeTableRow();
-                catr.setParent(dr.readDoubleWord()); // todo: codedindex
-                catr.setType(dr.readDoubleWord()); // todo: codedindex
-                catr.setValue(readBlobStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                catr.setParent(drw.read(hasConstantIndexSize));
+                catr.setType(drw.read(hasCustomAttributeIndexSize));
+                catr.setValue(drw.read(blobIndexSize));
                 customAttributeTableRows.add(catr);
             }
             md.setCustomAttributeTableRows(customAttributeTableRows);
@@ -332,7 +509,7 @@ public class CLRParser {
                 ClassLayoutTableRow cltr = new ClassLayoutTableRow();
                 cltr.setPackingSize(dr.readWord());
                 cltr.setClassSize(dr.readDoubleWord());
-                cltr.setParent(readSimpleIndex(md.getTypeDefTableRows(), dr));
+                cltr.setParent(drw.read(indexSize(rowCounts.get(MD.typeDef))));
                 classLayoutTableRows.add(cltr);
             }
             md.setClassLayoutTableRows(classLayoutTableRows);
@@ -350,7 +527,7 @@ public class CLRParser {
             for (int i = 0; i < numModules; i++) {
                 FieldLayoutTableRow fltr = new FieldLayoutTableRow();
                 fltr.setOffset(dr.readDoubleWord());
-                fltr.setField(readSimpleIndex(md.getFieldTableRows(), dr));
+                fltr.setField(drw.read(indexSize(rowCounts.get(MD.field))));
                 fieldLayoutTableRows.add(fltr);
             }
             md.setFieldLayoutTableRows(fieldLayoutTableRows);
@@ -394,7 +571,7 @@ public class CLRParser {
             List<ModuleRefTableRow> moduleRefTableRows = new ArrayList<>();
             for (int i = 0; i < numModules; i++) {
                 ModuleRefTableRow mrtr = new ModuleRefTableRow();
-                mrtr.setName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                mrtr.setName(drw.read(stringIndexSize));
                 moduleRefTableRows.add(mrtr);
             }
             md.setModuleRefTableRows(moduleRefTableRows);
@@ -415,9 +592,9 @@ public class CLRParser {
             for (int i = 0; i < numModules; i++) {
                 ImplMapTableRow imtr = new ImplMapTableRow();
                 imtr.setMappingFlags(dr.readWord());
-                imtr.setMemberForwarded(dr.readDoubleWord()); // complex index
-                imtr.setImportName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                imtr.setImportScope(readSimpleIndex(md.getModuleRefTableRows(), dr));
+                imtr.setMemberForwarded(drw.read(memberForwardedIndexSize));
+                imtr.setImportName(drw.read(stringIndexSize));
+                imtr.setImportScope(indexSize(rowCounts.get(MD.moduleRef)));
                 implMapTableRows.add(imtr);
             }
             md.setImplMapTableRows(implMapTableRows);
@@ -449,9 +626,9 @@ public class CLRParser {
                 atr.setBuildNumber(dr.readWord());
                 atr.setRevisionNumber(dr.readWord());
                 atr.setFlags(dr.readDoubleWord());
-                atr.setPublicKey(readBlobStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                atr.setName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                atr.setCulture(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                atr.setPublicKey(drw.read(blobIndexSize));
+                atr.setName(drw.read(stringIndexSize));
+                atr.setCulture(drw.read(stringIndexSize));
                 assemblyTableRows.add(atr);
             }
             md.setAssemblyTableRows(assemblyTableRows);
@@ -479,10 +656,10 @@ public class CLRParser {
                 artr.setBuildNumber(dr.readWord());
                 artr.setRevisionNumber(dr.readWord());
                 artr.setFlags(dr.readDoubleWord());
-                artr.setPublicKeyOrToken(readBlobStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                artr.setName(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                artr.setCulture(readStringStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
-                artr.setHashValue(readBlobStreamIndex(metadataStream.getOffsetSizeFlags(), dr));
+                artr.setPublicKeyOrToken(drw.read(blobIndexSize));
+                artr.setName(drw.read(stringIndexSize));
+                artr.setCulture(drw.read(stringIndexSize));
+                artr.setHashValue(drw.read(blobIndexSize));
                 assemblyRefTableRows.add(artr);
             }
             md.setAssemblyRefTableRows(assemblyRefTableRows);
@@ -523,8 +700,8 @@ public class CLRParser {
             List<NestedClassTableRow> nestedClassTableRows = new ArrayList<>();
             for (int i = 0; i < numModules; i++) {
                 NestedClassTableRow nctr = new NestedClassTableRow();
-                nctr.setNestedClass(readSimpleIndex(md.getTypeDefTableRows(), dr));
-                nctr.setEnclosingClass(readSimpleIndex(md.getTypeDefTableRows(), dr));
+                nctr.setNestedClass(drw.read(indexSize(rowCounts.get(MD.typeDef))));
+                nctr.setEnclosingClass(drw.read(indexSize(rowCounts.get(MD.typeDef))));
                 nestedClassTableRows.add(nctr);
             }
             md.setNestedClassTableRows(nestedClassTableRows);
@@ -604,66 +781,98 @@ public class CLRParser {
         //		};
         //	}
         //}
+        /*
         int ador = pe.getSectionTable().getRVAConverter().convertVirtualAddressToRawDataPointer(address);
+         */
 
         //System.out.println("hi");
         //var pe = PEParser.parse(Path.of(""));
         return md;
     }
 
-    private static StreamHeader findMetadataStream(List<StreamHeader> streamHeaders) {
-        for (StreamHeader streamHeader : streamHeaders) {
-            String name = streamHeader.getName();
-            if (name.equals("#~") || name.equals("#-")) {
-                return streamHeader;
+    private static int bitsNeeded(int rc)
+    {
+        if (rc == 0)
+            return 0;
+        int r = 1;
+        --rc;
+        while ((rc >>= 1) != 0)
+            ++r;
+        return r;
+    }
+
+    private static int bitsNeeded(List<Integer> rowCounts)
+    {
+        int max = 0;
+        for (Integer rc : rowCounts) {
+            if (rc == null)
+                continue;
+            max = Math.max(max, bitsNeeded(rc));
+        }
+        return max;
+    }
+
+    private static int compositeIndexSize(Integer... rowCounts)
+    {
+        return (bitsNeeded(Arrays.asList(rowCounts)) + bitsNeeded(rowCounts.length) <= 16) ? 2 : 4;
+    }
+
+    private static int indexSize(int rowCount)
+    {
+        return rowCount <= 0xffff ? 2 : 4;
+    }
+
+    static byte[] parseHeader(StreamHeader sh, DataReader dr) throws IOException {
+        return parseUnknown(sh, dr);
+    }
+
+    static byte[] parseStrings(StreamHeader sh, DataReader dr) throws IOException {
+        return parseUnknown(sh, dr);
+    }
+
+    static byte[] parseUS(StreamHeader sh, DataReader dr) throws IOException {
+        return parseUnknown(sh, dr);
+    }
+
+    static byte[] parseGuid(StreamHeader sh, DataReader dr) throws IOException {
+        return parseUnknown(sh, dr);
+    }
+
+    static byte[] parseUnknown(StreamHeader sh, DataReader dr) throws IOException {
+        //dr.jumpTo(sh.getOffset() - 512);
+        jumpToNoJump(dr, sh.getOffset());
+        byte[] b = new byte[sh.getSize()];
+        dr.read(b);
+        return b;
+    }
+
+    static void jumpToNoJump(DataReader dr, int location) throws IOException {
+        int currentPosition = dr.getPosition();
+        dr.jumpTo(location);
+        if (currentPosition != dr.getPosition()) {
+            throw new RuntimeException("Jump was off by " + (dr.getPosition() - currentPosition));
+        }
+    }
+
+    static class DataReaderWrapper {
+        private final IDataReader dr;
+        public DataReaderWrapper(IDataReader dataReader) {
+            this.dr = dataReader;
+        }
+        public int read(int bytes) {
+            try {
+                if (bytes == 1) {
+                    return dr.readByte();
+                } else if (bytes == 2) {
+                    return dr.readWord();
+                } else if (bytes == 4) {
+                    return dr.readDoubleWord();
+                } else {
+                    throw new RuntimeException("Cannot read " + bytes + " bytes.");
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
             }
-        }
-        return null;
-    }
-
-    private static StreamHeader findStringsStream(List<StreamHeader> streamHeaders) {
-        for (StreamHeader streamHeader : streamHeaders) {
-            String name = streamHeader.getName();
-            if (name.equals("#Strings")) {
-                return streamHeader;
-            }
-        }
-        return null;
-    }
-
-    private static int readStringStreamIndex(int offsetSizeFlags, DataReader dr) throws IOException {
-        return readStreamIndex(StreamOffsetSizeFlags.String, offsetSizeFlags, dr);
-    }
-
-    private static int readGuidStreamIndex(int offsetSizeFlags, DataReader dr) throws IOException {
-        return readStreamIndex(StreamOffsetSizeFlags.GUID, offsetSizeFlags, dr);
-    }
-
-    private static int readBlobStreamIndex(int offsetSizeFlags, DataReader dr) throws IOException {
-        return readStreamIndex(StreamOffsetSizeFlags.Blob, offsetSizeFlags, dr);
-    }
-
-    private static int readStreamIndex(int streamFlag, int offsetSizeFlags, DataReader dr) throws IOException {
-        if ((streamFlag & offsetSizeFlags) == streamFlag) {
-            return dr.readDoubleWord();
-        } else {
-            return dr.readWord();
-        }
-    }
-
-    private static <T> int readSimpleIndex(List<T> l, DataReader dr) throws IOException {
-        if (l.size() >= 65536) { // 2^16
-            return dr.readDoubleWord();
-        } else {
-            return dr.readWord();
-        }
-    }
-
-    private static <T> int readCodedIndex(List<T> l, DataReader dr) throws IOException {
-        if (l.size() >= 65536) { // 2^16
-            return dr.readDoubleWord();
-        } else {
-            return dr.readWord();
         }
     }
 }

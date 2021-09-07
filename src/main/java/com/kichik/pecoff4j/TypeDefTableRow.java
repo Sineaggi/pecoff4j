@@ -1,12 +1,19 @@
 package com.kichik.pecoff4j;
 
+import java.util.Objects;
+
 public class TypeDefTableRow {
+    private final Metadata metadata;
     private int flags;
     private int typeName;
     private int typeNamespace;
     private int extendsType;
     private int fieldList;
     private int methodList;
+
+    public TypeDefTableRow(Metadata metadata) {
+        this.metadata = Objects.requireNonNull(metadata);
+    }
 
     public int getFlags() {
         return flags;
@@ -54,5 +61,61 @@ public class TypeDefTableRow {
 
     public void setMethodList(int methodList) {
         this.methodList = methodList;
+    }
+
+    public String name() {
+        return metadata.stringsStream.get(typeName);
+    }
+
+    public String namespace() {
+        return metadata.stringsStream.get(typeNamespace);
+    }
+
+    public boolean isEnum() {
+        TypeDefOrRef row = extendsType();
+        if (row instanceof TypeDefOrRef.TypeRef) {
+            TypeRefTableRow tr = ((TypeDefOrRef.TypeRef)row).typeRef();
+            return tr.name().equals("Enum") && tr.namespace().equals("System");
+        } else if (row instanceof TypeDefOrRef.TypeDef) {
+            TypeDefTableRow td = ((TypeDefOrRef.TypeDef)row).typeDef();
+            return td.name().equals("Enum") && td.namespace().equals("System");
+        } else {
+            throw new RuntimeException("not yet implemented");
+        }
+    }
+
+    public TypeDefOrRef extendsType() {
+        return metadata.typeDefOrRef(extendsType);
+    }
+}
+
+// todo: replace with sealed hierarchy
+interface TypeDefOrRef {
+    // todo: replace with record
+    class TypeDef implements TypeDefOrRef {
+        TypeDefTableRow typeDefTableRow;
+        public TypeDef(TypeDefTableRow typeDefTableRow) {
+            this.typeDefTableRow = typeDefTableRow;
+        }
+        public TypeDefTableRow typeDef() {
+            return typeDefTableRow;
+        }
+    }
+    // todo: replace with record
+    class TypeRef implements TypeDefOrRef {
+        TypeRefTableRow typeRefTableRow;
+        public TypeRef(TypeRefTableRow typeRefTableRow) {
+            this.typeRefTableRow = typeRefTableRow;
+        }
+        public TypeRefTableRow typeRef() {
+            return typeRefTableRow;
+        }
+    }
+
+    // todo: implement
+    class TypeSpec implements TypeDefOrRef {
+        public TypeSpec() {
+            throw new RuntimeException("not yet implemented");
+        }
     }
 }

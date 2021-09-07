@@ -21,6 +21,8 @@ public class Metadata {
     private List<AssemblyRefTableRow> assemblyRefTableRows;
     private List<NestedClassTableRow> nestedClassTableRows;
 
+    protected StringsStream stringsStream;
+
     public List<ModuleTableRow> getModuleTableRows() {
         return moduleTableRows;
     }
@@ -155,5 +157,84 @@ public class Metadata {
 
     public void setNestedClassTableRows(List<NestedClassTableRow> nestedClassTableRows) {
         this.nestedClassTableRows = nestedClassTableRows;
+    }
+
+    public TypeDefOrRef typeDefOrRef(int extendsType) {
+        int peko = compositeIndexSize(List.of(typeDefTableRows.size(), typeRefTableRows.size()));
+
+        //int a = compositeValue();
+        //int total = typeDefTableRows.size() + typeRefTableRows.size(); // todo: + typeSpecTableRows.size();
+        throw new RuntimeException("not impled");
+    }
+
+
+    private int bitsNeeded(int rc)
+    {
+        int r = 1;
+        --rc;
+        while ((rc >>= 1) != 0)
+            ++r;
+        return r;
+    }
+
+    /*
+    static class CompositeIndex {
+        private final int codedIndex;
+        public CompositeIndex(int codedIndex) {
+            this.codedIndex = codedIndex;
+        }
+        public int index() {
+            return codedIndex >> indexBits;
+        }
+
+        public MD type() {
+
+        }
+    }
+
+    public ResolutionScope.Value compositeValue(Metadata db, CompositeIndex c) {
+        if (j instanceof ResolutionScope) {
+             switch (c.type())
+            {
+                case ResolutionScope.module:
+                    return new ResolutionScope.Value.ModuleValue(moduleTableRows.get(c.index()));
+                    //return ResolutionScopeValue(db.moduleTable[c.index]);
+                case ResolutionScope.moduleRef:
+                    return new ResolutionScope.Value.ModuleRefValue(moduleRefTableRows.get(c.index()));
+                    //return ResolutionScopeValue(db.moduleRefTable[c.index]);
+                case ResolutionScope.assemblyRef:
+                    return new ResolutionScope.Value.AssemblyRefValue(assemblyRefTableRows.get(c.index()));
+                    //return ResolutionScopeValue(db.assemblyRefTable[c.index]);
+                case ResolutionScope.typeRef:
+                    return new ResolutionScope.Value.TypeRefValue(typeRefTableRows.get(c.index()));
+                    //return ResolutionScopeValue(db.typeRefTable[c.index]);
+            }
+        }
+    }
+     */
+
+    private int bitsNeeded(List<Integer> rowCounts)
+    {
+
+        //int t1 = bitsNeeded(rowCounts.size() > 0 ? rowCounts.get(0) : 0);
+        //int t2 = bitsNeeded(rowCounts.subList(1, rowCounts.size()));
+        //return Math.max(t1, t2);
+        int max = 0;
+        for (int rc : rowCounts) {
+            max = Math.max(max, bitsNeeded(rc));
+        }
+        return max;
+    }
+
+
+    private int compositeIndexSize(List<Integer> rowCounts)
+    {
+
+        // 2^(16 - log2 3);
+        //rowCounts.size();
+        int total = rowCounts.stream().mapToInt(i -> i).sum();
+        int maxWeCanEncode = (int)Math.pow(2, (16 - (Math.log(rowCounts.size()) / Math.log(2))));
+
+        return (bitsNeeded(rowCounts) + bitsNeeded(rowCounts.size()) <= 16) ? 2 : 4;
     }
 }

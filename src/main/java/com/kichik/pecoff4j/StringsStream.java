@@ -1,7 +1,5 @@
 package com.kichik.pecoff4j;
 
-import com.kichik.pecoff4j.io.DataReader;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
@@ -9,32 +7,23 @@ import java.util.Map;
 
 public class StringsStream {
     private final byte[] data;
-    private final Map<Integer, String> strings;
+    private final Map<Integer, String> strings = new HashMap<>();
 
-    public StringsStream(byte[] data) throws IOException {
+    public StringsStream(byte[] data) {
         this.data = data;
-        DataReader dr = new DataReader(data);
-        Map<Integer, String> strings = new HashMap<>();
-        for (int i = dr.getPosition(); i < data.length; i = dr.getPosition()) {
-            String str = dr.readUtf();
-            strings.put(i, str);
-        }
-        this.strings = strings;
     }
 
-    public String get(int offset) throws IOException {
-        try {
-            return strings.computeIfAbsent(offset, (i) -> {
-                DataReader dr = new DataReader(data);
-                try {
-                    dr.jumpTo(i);
-                    return dr.readUtf();
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            });
-        } catch (UncheckedIOException e) {
-            throw e.getCause();
+    private String readUtf(int offset) {
+        StringBuilder sb = new StringBuilder();
+        int c;
+        int i = 0;
+        while ((c = data[offset + i++]) != 0) {
+            sb.append((char) c);
         }
+        return sb.toString();
+    }
+
+    public String get(int offset) {
+        return strings.computeIfAbsent(offset, this::readUtf);
     }
 }
