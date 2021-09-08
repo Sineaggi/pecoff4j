@@ -100,6 +100,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.1</version>
+                <configuration>
+                    <compilerArgs>
+                        <arg>-Werror</arg>
+                        <arg>-Xlint:all,-options,-path</arg>
+                    </compilerArgs>
+                </configuration>
                 <executions>
                     <!-- disable default compilation phase, as it is used to signal the correct Java version to IDES-->
                     <!-- specifying `< java 9` will not allow IDEs to properly interpret module-info.java  -->

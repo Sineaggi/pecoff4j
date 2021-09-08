@@ -24,7 +24,7 @@ public class SectionTable {
 	public static final String LOAD_CONFIG_TABLE = ".rdata";
 
 	// Data
-	private List<SectionHeader> headers = new ArrayList();
+	private List<SectionHeader> headers = new ArrayList<SectionHeader>();
 	private IntMap sections = new IntMap();
 	private RVAConverter rvaConverter;
 
@@ -77,7 +77,7 @@ public class SectionTable {
 	}
 
 	public SectionHeader[] getHeadersPointerSorted() {
-		List<SectionHeader> headers = new ArrayList();
+		List<SectionHeader> headers = new ArrayList<>();
 		for (int i = 0; i < getNumberOfSections(); i++) {
 			headers.add(getHeader(i));
 		}

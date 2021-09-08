@@ -321,7 +321,7 @@ public class PEAssembler {
 	private static void write(PE pe, BoundImportDirectoryTable bidt,
 			IDataWriter dw) throws IOException {
 		int pos = dw.getPosition();
-		List<BoundImport> bil = new ArrayList();
+		List<BoundImport> bil = new ArrayList<>();
 
 		for (int i = 0; i < bidt.size(); i++) {
 			BoundImport bi = bidt.get(i);
@@ -343,7 +343,7 @@ public class PEAssembler {
 		dw.writeDoubleWord(0);
 
 		// Now write out module names
-		Set names = new HashSet();
+		Set<String> names = new HashSet<>();
 		for (int i = 0; i < bil.size(); i++) {
 			String s = bil.get(i).getModuleName();
 			if (!names.contains(s))

@@ -10,9 +10,10 @@
 package com.kichik.pecoff4j;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class ImportDirectoryTable {
-	private ArrayList imports = new ArrayList();
+	private List<ImportEntry> imports = new ArrayList<>();
 
 	public void add(ImportEntry entry) {
 		imports.add(entry);
@@ -23,6 +24,6 @@ public class ImportDirectoryTable {
 	}
 
 	public ImportEntry getEntry(int index) {
-		return (ImportEntry) imports.get(index);
+		return imports.get(index);
 	}
 }

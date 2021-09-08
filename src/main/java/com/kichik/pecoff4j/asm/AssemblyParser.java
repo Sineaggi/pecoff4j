@@ -19,7 +19,7 @@ import com.kichik.pecoff4j.util.Reflection;
 public class AssemblyParser {
 	public static AbstractInstruction[] parseAll(int offset, InputStream is)
 			throws IOException {
-		List<AbstractInstruction> instructions = new ArrayList();
+		List<AbstractInstruction> instructions = new ArrayList<>();
 		AbstractInstruction ins = null;
 		while ((ins = parse(is)) != null) {
 			ins.setOffset(offset);
